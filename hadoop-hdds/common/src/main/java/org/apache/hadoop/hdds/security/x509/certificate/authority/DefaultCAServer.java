@@ -36,6 +36,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -115,18 +116,21 @@ public class DefaultCAServer implements CertificateServer {
    */
   private PKIProfile profile;
   private CertificateApprover approver;
+  private CertificateStore store;
 
   /**
    * Create an Instance of DefaultCAServer.
-   *
-   * @param subject - String Subject
+   *  @param subject - String Subject
    * @param clusterID - String ClusterID
    * @param scmID - String SCMID.
+   * @param certificateStore - A store used to persist Certificates.
    */
-  public DefaultCAServer(String subject, String clusterID, String scmID) {
+  public DefaultCAServer(String subject, String clusterID, String scmID,
+                         CertificateStore certificateStore) {
     this.subject = subject;
     this.clusterID = clusterID;
     this.scmID = scmID;
+    this.store = certificateStore;
   }
 
   @Override
@@ -168,6 +172,23 @@ public class DefaultCAServer implements CertificateServer {
     }
   }
 
+  /**
+   * Returns the Certificate corresponding to given certificate serial id if
+   * exist. Return null if it doesn't exist.
+   *
+   * @param certSerialId         - Certificate for this CA.
+   * @return X509CertificateHolder
+   * @throws CertificateException - usually thrown if this CA is not
+   * initialized.
+   * @throws IOException - on Error.
+   */
+  @Override
+  public X509Certificate getCertificate(String certSerialId) throws
+      IOException {
+    return store.getCertificateByID(new BigInteger(certSerialId),
+        CertificateStore.CertType.VALID_CERTS);
+  }
+
   private KeyPair getCAKeys() throws IOException {
     KeyCodec keyCodec = new KeyCodec(config, componentName);
     try {
@@ -207,12 +228,15 @@ public class DefaultCAServer implements CertificateServer {
             getCAKeys().getPrivate(),
             getCACertificate(), java.sql.Date.valueOf(beginDate),
             java.sql.Date.valueOf(endDate), csr);
+        store.storeValidCertificate(xcert.getSerialNumber(),
+            CertificateCodec.getX509Certificate(xcert));
         xcertHolder.complete(xcert);
         break;
       default:
         return null; // cannot happen, keeping checkstyle happy.
       }
-    } catch (IOException | OperatorCreationException e) {
+    } catch (CertificateException | IOException | OperatorCreationException e) {
+      LOG.error("Unable to issue a certificate. {}", e);
       xcertHolder.completeExceptionally(new SCMSecurityException(e));
     }
     return xcertHolder;
@@ -230,7 +254,19 @@ public class DefaultCAServer implements CertificateServer {
   public Future<Boolean> revokeCertificate(X509Certificate certificate,
       CertificateApprover.ApprovalType approverType)
       throws SCMSecurityException {
-    return null;
+    CompletableFuture<Boolean> revoked = new CompletableFuture<>();
+    if (certificate == null) {
+      revoked.completeExceptionally(new SCMSecurityException(
+          "Certificate cannot be null"));
+      return revoked;
+    }
+    try {
+      store.revokeCertificate(certificate.getSerialNumber());
+    } catch (IOException ex) {
+      LOG.error("Revoking the certificate failed. {}", ex.getCause());
+      throw new SCMSecurityException(ex);
+    }
+    return revoked;
   }
 
   /**

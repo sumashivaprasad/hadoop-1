@@ -42,6 +42,7 @@ import org.apache.hadoop.ozone.client.rest.headers.Header;
 import org.apache.hadoop.ozone.client.rest.response.BucketInfo;
 import org.apache.hadoop.ozone.client.rest.response.KeyInfoDetails;
 import org.apache.hadoop.ozone.client.rest.response.VolumeInfo;
+import org.apache.hadoop.ozone.client.rpc.ha.OMProxyProvider;
 import org.apache.hadoop.ozone.om.OMConfigKeys;
 import org.apache.hadoop.ozone.om.helpers.OmMultipartInfo;
 import org.apache.hadoop.ozone.om.helpers.OmMultipartUploadCompleteInfo;
@@ -614,7 +615,8 @@ public class RestClient implements ClientProtocol {
             bucketInfo.getBucketName(), bucketInfo.getAcls(),
             bucketInfo.getStorageType(),
             getBucketVersioningFlag(bucketInfo.getVersioning()), creationTime,
-            new HashMap<>());
+            new HashMap<>(), bucketInfo
+            .getEncryptionKeyName());
       }).collect(Collectors.toList());
     } catch (URISyntaxException e) {
       throw new IOException(e);
@@ -720,6 +722,11 @@ public class RestClient implements ClientProtocol {
   public S3SecretValue getS3Secret(String kerberosID) throws IOException {
     throw new UnsupportedOperationException("Ozone REST protocol does not " +
         "support this operation.");
+  }
+
+  @Override
+  public OMProxyProvider getOMProxyProvider() {
+    return null;
   }
 
   @Override
@@ -870,7 +877,7 @@ public class RestClient implements ClientProtocol {
           HddsClientUtils.formatDateTime(keyInfo.getModifiedOn()),
           ozoneKeyLocations, ReplicationType.valueOf(
               keyInfo.getType().toString()),
-          new HashMap<>());
+          new HashMap<>(), keyInfo.getFileEncryptionInfo());
       EntityUtils.consume(response);
       return key;
     } catch (URISyntaxException | ParseException e) {

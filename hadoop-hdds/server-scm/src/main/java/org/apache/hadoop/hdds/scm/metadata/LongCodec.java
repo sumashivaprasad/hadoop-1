@@ -20,6 +20,7 @@
 package org.apache.hadoop.hdds.scm.metadata;
 
 import com.google.common.primitives.Longs;
+import java.io.IOException;
 import org.apache.hadoop.utils.db.Codec;
 
 /**
@@ -28,12 +29,12 @@ import org.apache.hadoop.utils.db.Codec;
 public class LongCodec implements Codec<Long> {
 
   @Override
-  public byte[] toPersistedFormat(Long object) {
+  public byte[] toPersistedFormat(Long object) throws IOException {
     return Longs.toByteArray(object);
   }
 
   @Override
-  public Long fromPersistedFormat(byte[] rawData) {
+  public Long fromPersistedFormat(byte[] rawData) throws IOException {
     return Longs.fromByteArray(rawData);
   }
 }

@@ -319,6 +319,14 @@
     </description>
   </property>
 
+  <property>
+    <name>hdds.profiler.endpoint.enabled</name>
+    <value>false</value>
+    <tag>OZONE, MANAGEMENT</tag>
+    <description>Enable /prof java profiler servlet page on HTTP server.
+    </description>
+  </property>
+
   <!--Ozone Settings-->
   <property>
     <name>ozone.administrators</name>
@@ -1871,6 +1879,15 @@
 
       Default depends from the used jar. true for ozone-filesystem-lib-legacy
       jar and false for the ozone-filesystem-lib.jar
+    </description>
+  </property>
+  <property>
+    <name>ozone.manager.db.checkpoint.transfer.bandwidthPerSec</name>
+    <value>0</value>
+    <tag>OZONE</tag>
+    <description>
+      Maximum bandwidth used for Ozone Manager DB checkpoint download through
+      the servlet.
     </description>
   </property>
 </configuration>
