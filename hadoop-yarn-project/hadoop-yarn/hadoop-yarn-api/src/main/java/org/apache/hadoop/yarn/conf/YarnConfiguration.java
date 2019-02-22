@@ -3949,6 +3949,21 @@ public class YarnConfiguration extends Configuration {
   public static final String DEFAULT_NM_NUMA_AWARENESS_NUMACTL_CMD =
       "/usr/bin/numactl";
 
+
+  public static final String UNITY_SCHEDULER_PREFIX = "yarn.unityscheduler.";
+
+
+  /** Address of the unity scheduler service .*/
+  public static final String UNITY_SCHEDULER_HOST =
+      UNITY_SCHEDULER_PREFIX  + "hostname";
+
+  public static final String UNITY_SCHEDULER_PORT =
+      UNITY_SCHEDULER_PREFIX  + "port";
+
+  public static final int DEFAULT_UNITY_SCHEDULER_PORT =
+      8090;
+
+
   public YarnConfiguration() {
     super();
   }

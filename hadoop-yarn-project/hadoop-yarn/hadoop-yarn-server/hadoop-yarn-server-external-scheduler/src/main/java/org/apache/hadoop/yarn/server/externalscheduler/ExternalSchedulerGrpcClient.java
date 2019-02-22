@@ -3,15 +3,10 @@ package org.apache.hadoop.yarn.server.externalscheduler;
 import io.grpc.ManagedChannel;
 
 import io.grpc.netty.NettyChannelBuilder;
-import io.netty.channel.epoll.EpollDomainSocketChannel;
-import io.netty.channel.epoll.EpollEventLoopGroup;
-import io.netty.channel.unix.DomainSocketAddress;
-import io.netty.util.concurrent.DefaultThreadFactory;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import si.v1.SchedulerGrpc;
 
-import java.io.IOException;
-import java.net.SocketAddress;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -31,53 +26,25 @@ import java.util.concurrent.TimeUnit;
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-public class ExternalSchedulerGrpcClient implements AutoCloseable {
+public final class ExternalSchedulerGrpcClient implements AutoCloseable {
 
   private static final Log LOG = LogFactory.getLog(ExternalSchedulerGrpcClient.class);
 
   private final ManagedChannel channel;
 
+
   private ExternalSchedulerGrpcClient(ManagedChannel channel) {
     this.channel = channel;
   }
 
-  public static GrpcClientBuilder newBuilder() {
-    return new GrpcClientBuilder();
-  }
-
-  /**
-   * The Grpc Client builder.
-   */
-  public static class GrpcClientBuilder {
-
-    private SocketAddress socket;
-
-    public GrpcClientBuilder setDomainSocketAddress(SocketAddress address) {
-      this.socket = address;
-      return this;
-    }
-
-    private ManagedChannel getChannel(SocketAddress socketAddress)
-        throws IOException {
-      DefaultThreadFactory tf = new DefaultThreadFactory(
-          "yarn-external-scheduler-client-", true);
-      EpollEventLoopGroup loopGroup = new EpollEventLoopGroup(0, tf);
-      if (socketAddress instanceof DomainSocketAddress) {
-        ManagedChannel channel = NettyChannelBuilder.forAddress(socketAddress)
-            .channelType(EpollDomainSocketChannel.class)
-            .eventLoopGroup(loopGroup)
-            .usePlaintext()
-            .build();
-        return channel;
-      } else {
-        throw new IOException("Currently only unix domain socket is supported");
-      }
-    }
-
-    public ExternalSchedulerGrpcClient build() throws IOException {
-      ManagedChannel socketChannel = getChannel(socket);
-      return new ExternalSchedulerGrpcClient(socketChannel);
-    }
+  public ExternalSchedulerGrpcClient(String host, int port) {
+    this(NettyChannelBuilder.forAddress(host, port)
+        // Channels are secure by default (via SSL/TLS). For the example we disable TLS to avoid
+        // needing certificates.
+        //TODO - Enable SSL
+        //TODO - Authenticate to Unity scheduler using JWT/KRB
+        .usePlaintext()
+        .build());
   }
 
   /**
@@ -93,5 +60,23 @@ public class ExternalSchedulerGrpcClient implements AutoCloseable {
           + " gRPC communication channel in 5 seconds", e);
     }
   }
+
+  /**
+   * Creates a blocking stub for Unity Scheduler on the given channel.
+   * @return the blocking stub
+   */
+  public SchedulerGrpc.SchedulerBlockingStub createSchedulerBlockingStub() {
+    return SchedulerGrpc.newBlockingStub(channel);
+  }
+
+  /**
+   * Creates a blocking stub for Unity Scheduler on the given channel.
+   * @return the blocking stub
+   */
+  public SchedulerGrpc.SchedulerStub createSchedulerStub() {
+    return SchedulerGrpc.newStub(channel);
+  }
+
+
 }
 

@@ -1,10 +1,12 @@
 package org.apache.hadoop.yarn.server.externalscheduler;
 
+import io.grpc.stub.StreamObserver;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.util.Time;
 import org.apache.hadoop.yarn.api.protocolrecords.ResourceTypes;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
+import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.ContainerStatus;
 import org.apache.hadoop.yarn.api.records.ExecutionType;
@@ -66,12 +68,14 @@ import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event
     .SchedulerEvent;
 import org.apache.hadoop.yarn.util.resource.ResourceCalculator;
 import org.apache.hadoop.yarn.webapp.util.WebAppUtils;
+import si.v1.SchedulerGrpc;
 import si.v1.Si;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
 
 public class ExternalSchedulerShim extends AbstractYarnScheduler {
 
@@ -81,6 +85,10 @@ public class ExternalSchedulerShim extends AbstractYarnScheduler {
    */
 
   private String rmId;
+
+  private ExternalSchedulerGrpcClient grpcClient;
+
+  private SchedulerGrpc.SchedulerStub schedulerStub;
 
   public ExternalSchedulerShim() {
     super(ExternalSchedulerShim.class.getName());
@@ -171,11 +179,11 @@ public class ExternalSchedulerShim extends AbstractYarnScheduler {
     break;
     case APP_ADDED:
     {
-      //TODO - Add to cache and send event
-      updateRequestBuilder.addNewJobs()
+      //TODO : Check if we need to do anythiung here since appAttemptId is
+      // what we are interested in
       //        updateRequestBuilder.addRemoveJobs()
-
 //      AppAddedSchedulerEvent appAddedEvent = (AppAddedSchedulerEvent) event;
+
 //      String queueName = resolveReservationQueueName(appAddedEvent.getQueue(),
 //          appAddedEvent.getApplicationId(), appAddedEvent.getReservationID(),
 //          appAddedEvent.getIsAppRecovering());
@@ -194,7 +202,8 @@ public class ExternalSchedulerShim extends AbstractYarnScheduler {
     break;
     case APP_REMOVED:
     {
-      //TODO - Add to cache
+      //TODO - Remove from cache
+      //TODO - Send removeJobRequest
 //      AppRemovedSchedulerEvent appRemovedEvent = (AppRemovedSchedulerEvent)event;
 //      doneApplication(appRemovedEvent.getApplicationID(),
 //          appRemovedEvent.getFinalState());
@@ -202,15 +211,28 @@ public class ExternalSchedulerShim extends AbstractYarnScheduler {
     break;
     case APP_ATTEMPT_ADDED:
     {
-      AppAttemptAddedSchedulerEvent appAttemptAddedEvent =
-          (AppAttemptAddedSchedulerEvent) event;
-//      addApplicationAttempt(appAttemptAddedEvent.getApplicationAttemptId(),
-//          appAttemptAddedEvent.getTransferStateFromPreviousAttempt(),
-//          appAttemptAddedEvent.getIsAttemptRecovering());
+
+      //TODO - Add to cache
+//      AppAttemptAddedSchedulerEvent appAttemptAddedEvent =
+//          (AppAttemptAddedSchedulerEvent) event;
+//
+//      ApplicationAttemptId appAttemptId = appAttemptAddedEvent
+//          .getApplicationAttemptId();
+//      Si.UpdateRequest.Builder updateRequestBuilder =
+//          createUpdateRequestBuilder();
+//      Si.AddJobRequest.Builder addJobRequestBuilder = Si.AddJobRequest
+//        .newBuilder();
+//      addJobRequestBuilder.setJobId(appAttemptId.toString());
+//      addJobRequestBuilder.set
+//      updateRequestBuilder.addNewJobs(addJobRequestBuilder.build());
+      //TODO - Add to cache
+
     }
     break;
     case APP_ATTEMPT_REMOVED:
     {
+      //TODO - Remove from cache
+      //TODO - Send removeJobRequest
       AppAttemptRemovedSchedulerEvent appAttemptRemovedEvent =
           (AppAttemptRemovedSchedulerEvent) event;
 //      doneApplicationAttempt(appAttemptRemovedEvent.getApplicationAttemptID(),
@@ -280,6 +302,7 @@ public class ExternalSchedulerShim extends AbstractYarnScheduler {
     case MANAGE_QUEUE:
     {
       //TODO - API based queue management
+      //TODO - Add to cache
 //      QueueManagementChangeEvent queueManagementChangeEvent =
 //          (QueueManagementChangeEvent) event;
 //      ParentQueue parentQueue = queueManagementChangeEvent.getParentQueue();
@@ -307,6 +330,18 @@ public class ExternalSchedulerShim extends AbstractYarnScheduler {
         YarnConfiguration.RM_BIND_HOST,
         WebAppUtils.getRMWebAppURLWithoutScheme(rmContext
             .getYarnConfiguration()));
+
+    Configuration conf = rmContext.getYarnConfiguration();
+    String unitySchedulerHost = conf.get(YarnConfiguration
+        .UNITY_SCHEDULER_HOST);
+    int unitySchedulerPort = conf.getInt(YarnConfiguration
+        .UNITY_SCHEDULER_PORT, YarnConfiguration.DEFAULT_UNITY_SCHEDULER_PORT);
+
+    grpcClient = new ExternalSchedulerGrpcClient(unitySchedulerHost,
+        unitySchedulerPort);
+
+    schedulerStub = grpcClient
+        .createSchedulerStub();
   }
 
   @Override public Allocation allocate(ApplicationAttemptId appAttemptId,
@@ -321,12 +356,34 @@ public class ExternalSchedulerShim extends AbstractYarnScheduler {
     // request and vice versa
     List<Si.AllocationAsk> allocationRRAsks = transformResourceRequests
         (appAttemptId, resourceRequests);
+
+    Si.AddJobRequest.Builder addJobRequestBuilder = Si.AddJobRequest
+            .newBuilder();
+    addJobRequestBuilder.setJobId(appAttemptId.toString());
+
+    //TODO - Check whether this is just a new Job Request independent
+    // Allocation REequest
+//    addJobRequestBuilder.setPartitionName(allocationRRAsks.get(0)
+//        .getPartitionName());
+//    addJobRequestBuilder.setPartitionName(allocationRRAsks.get(0)
+//        .getPartitionName());
+
+    updateRequestBuilder.addNewJobs(addJobRequestBuilder);
+
     updateRequestBuilder.addAllAsks(allocationRRAsks);
 
-    List<Si.AllocationAsk> allocationSRAsks = transformSchedulingRequests
-        (appAttemptId,
-        schedulingRequests);
-    updateRequestBuilder.addAllAsks(allocationSRAsks);
+    //TODO - Uncomment below after scheduling request translation is done.
+//    List<Si.AllocationAsk> allocationSRAsks = transformSchedulingRequests
+//        (appAttemptId,
+//        schedulingRequests);
+//    updateRequestBuilder.addAllAsks(allocationSRAsks);
+
+    Si.UpdateRequest updateRequest = updateRequestBuilder.build();
+
+    final StreamObserver<Si.UpdateRequest> scheduleUpdateRequestObserver =
+        schedulerStub.update(responseObserver);
+    scheduleUpdateRequestObserver.onNext(updateRequest);
+
 
     //TODO - release requests
 
@@ -334,12 +391,37 @@ public class ExternalSchedulerShim extends AbstractYarnScheduler {
 
     //TODO - Container updates
 
-    Si.UpdateRequest updateRequest = updateRequestBuilder.build();
-
-
-
-
   }
+
+  private StreamObserver<Si.UpdateResponse> responseObserver = new
+      StreamObserver<Si.UpdateResponse>() {
+
+        final CountDownLatch finishLatch = new CountDownLatch(1);
+        @Override
+        public void onNext(Si.UpdateResponse updateResponse) {
+          final List<Si.AcceptedJob> acceptedJobsList =
+              updateResponse.getAcceptedJobsList();
+
+
+          if ( acceptedJobsList) {
+
+          }
+
+        }
+
+        @Override
+        public void onError(Throwable t) {
+          finishLatch.countDown();
+        }
+
+        @Override
+        public void onCompleted() {
+          finishLatch.countDown();
+        }
+
+        //TODO - Add timeout
+      };
+
 
 
   private Si.UpdateRequest.Builder createUpdateRequestBuilder() {
