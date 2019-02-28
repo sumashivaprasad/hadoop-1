@@ -3961,7 +3961,7 @@ public class YarnConfiguration extends Configuration {
       UNITY_SCHEDULER_PREFIX  + "port";
 
   public static final int DEFAULT_UNITY_SCHEDULER_PORT =
-      8090;
+      9385;
 
 
   public YarnConfiguration() {

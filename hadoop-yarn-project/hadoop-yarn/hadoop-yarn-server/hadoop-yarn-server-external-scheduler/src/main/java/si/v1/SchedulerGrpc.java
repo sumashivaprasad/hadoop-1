@@ -180,8 +180,7 @@ public final class SchedulerGrpc {
      */
     public void registerResourceManager(si.v1.Si.RegisterResourceManagerRequest request,
         io.grpc.stub.StreamObserver<si.v1.Si.RegisterResourceManagerResponse> responseObserver) {
-      asyncUnaryCall(
-          getChannel().newCall(getRegisterResourceManagerMethod(), getCallOptions()), request, responseObserver);
+      asyncUnimplementedUnaryCall(getRegisterResourceManagerMethod(), responseObserver);
     }
 
     /**
@@ -193,8 +192,7 @@ public final class SchedulerGrpc {
      */
     public io.grpc.stub.StreamObserver<si.v1.Si.UpdateRequest> update(
         io.grpc.stub.StreamObserver<si.v1.Si.UpdateResponse> responseObserver) {
-      return asyncBidiStreamingCall(
-          getChannel().newCall(getUpdateMethod(), getCallOptions()), responseObserver);
+      return asyncUnimplementedStreamingCall(getUpdateMethod(), responseObserver);
     }
   }
 
