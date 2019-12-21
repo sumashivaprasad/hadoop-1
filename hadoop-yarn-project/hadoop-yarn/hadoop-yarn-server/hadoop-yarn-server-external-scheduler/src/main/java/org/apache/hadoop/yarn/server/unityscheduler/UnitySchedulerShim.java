@@ -1,6 +1,7 @@
 package org.apache.hadoop.yarn.server.unityscheduler;
 
 import com.google.common.annotations.VisibleForTesting;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.security.UserGroupInformation;
@@ -81,6 +82,11 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static org.apache.hadoop.yarn.nodelabels.CommonNodeLabelsManager
+    .NO_LABEL;
+import static org.apache.hadoop.yarn.server.resourcemanager.webapp
+    .RMWebServices.DEFAULT_QUEUE;
+
 public class UnitySchedulerShim extends AbstractYarnScheduler<UnitySchedulerAppAttempt,
     FiCaSchedulerNode> {
 
@@ -110,6 +116,13 @@ public class UnitySchedulerShim extends AbstractYarnScheduler<UnitySchedulerAppA
     super(UnitySchedulerShim.class.getName());
   }
 
+  @Override
+  public void serviceInit(Configuration conf) throws Exception {
+    Configuration configuration = new Configuration(conf);
+    super.serviceInit(conf);
+    initScheduler(configuration);
+  }
+
   @VisibleForTesting
   void initScheduler(Configuration configuration) throws
       IOException {
@@ -121,7 +134,12 @@ public class UnitySchedulerShim extends AbstractYarnScheduler<UnitySchedulerAppA
 
       this.yarnConf = configuration;
 
+      //TODO - Validation - DefaultResourceCalculator is not supported
       resourceCalculator = new DominantResourceCalculator();
+
+      this.minimumAllocation = super.getMinimumAllocation();
+      initMaximumResourceCapability(super.getMaximumAllocation());
+
       this.applications = new ConcurrentHashMap<>();
       this.labelManager = rmContext.getNodeLabelManager();
 
@@ -142,7 +160,7 @@ public class UnitySchedulerShim extends AbstractYarnScheduler<UnitySchedulerAppA
         Si.RegisterResourceManagerRequest.newBuilder();
 
     registerRMRequest.setRmId(rmId);
-    //    registerRMRequest.setPolicyGroup()
+    registerRMRequest.setPolicyGroup("queues");
     registerRMRequest.setVersion("1.0");
 
     SchedulerGrpc.SchedulerBlockingStub schedulerBlockingStub =
@@ -288,7 +306,10 @@ public class UnitySchedulerShim extends AbstractYarnScheduler<UnitySchedulerAppA
         callBackHandler);
   }
 
-  @Override public void setRMContext(RMContext rmContext) {
+  @Override
+  public void setRMContext(RMContext rmContext) {
+
+    this.rmContext = rmContext;
     rmId = WebAppUtils.getWebAppBindURL(rmContext.getYarnConfiguration(),
         YarnConfiguration.RM_BIND_HOST, WebAppUtils
             .getRMWebAppURLWithoutScheme(rmContext.getYarnConfiguration()));
@@ -303,7 +324,6 @@ public class UnitySchedulerShim extends AbstractYarnScheduler<UnitySchedulerAppA
         unitySchedulerPort);
 
     schedulerStub = grpcClient.createSchedulerStub();
-
     callBackHandler = new UnitySchedulerCallBack(this, context, rmContext);
 
     registerResourceManager();
@@ -331,7 +351,7 @@ public class UnitySchedulerShim extends AbstractYarnScheduler<UnitySchedulerAppA
       updateRequestBuilder.addAllAsks(allocationRRAsks);
     }
 
-    if (schedulingRequests.size() > 0) {
+    if (schedulingRequests != null && schedulingRequests.size() > 0) {
       List<Si.AllocationAsk> allocationSRAsks =
           AllocationRequestUtils.transformSchedulingRequests(rmContext,
               appAttemptId, schedulingRequests);
@@ -342,10 +362,6 @@ public class UnitySchedulerShim extends AbstractYarnScheduler<UnitySchedulerAppA
     if (context.isJobAccepted(jobId)) {
 
       //TODO - Replace ActiveUsersManager -?
-
-      SchedulerApplication<UnitySchedulerAppAttempt> app = applications
-          .get(appAttemptId.getApplicationId());
-
       //TODO - Uncomment below after fixing below code
 //      UnitySchedulerAppAttempt currentAppAttempt = app.getCurrentAppAttempt();
 //      if ( jobId.equals(currentAppAttempt.getApplicationAttemptId().toString
@@ -365,8 +381,6 @@ public class UnitySchedulerShim extends AbstractYarnScheduler<UnitySchedulerAppA
     //TODO - Blacklist nodes - send node updates
 
     //TODO - Container updates
-
-    //TODO - Pull from Cache
 
     UnitySchedulerAppAttempt schedulerAppAttempt =
         getApplicationAttempt(appAttemptId);
@@ -436,8 +450,12 @@ public class UnitySchedulerShim extends AbstractYarnScheduler<UnitySchedulerAppA
     RMApp app = rmContext.getRMApps().get(appAttemptId.getApplicationId());
 
     addJobRequestBuilder.setJobId(appAttemptId.toString());
-    addJobRequestBuilder.setPartitionName(app.getAppNodeLabelExpression());
-    addJobRequestBuilder.setQueueName(app.getQueue());
+
+    final String partition = AllocationRequestUtils.getPartition(app);
+    addJobRequestBuilder.setPartitionName(partition);
+
+    final String queue = AllocationRequestUtils.getQueue(app);
+    addJobRequestBuilder.setQueueName(queue);
     updateRequestBuilder.addNewJobs(addJobRequestBuilder.build());
 
     SchedulerApplication<UnitySchedulerAppAttempt> application = applications

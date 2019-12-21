@@ -1,5 +1,6 @@
 package org.apache.hadoop.yarn.server.unityscheduler;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.api.records.Resource;
@@ -14,6 +15,11 @@ import si.v1.Si;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+
+import static org.apache.hadoop.yarn.nodelabels.CommonNodeLabelsManager
+    .NO_LABEL;
+import static org.apache.hadoop.yarn.server.resourcemanager.webapp
+    .RMWebServices.DEFAULT_QUEUE;
 
 public class AllocationRequestUtils {
 
@@ -37,7 +43,7 @@ public class AllocationRequestUtils {
       askBuilder.setMaxAllocations(req.getNumContainers());
 
       //Node Label
-      askBuilder.setPartitionName(req.getNodeLabelExpression());
+      askBuilder.setPartitionName(AllocationRequestUtils.getPartition(req));
 
       //Priority
       Si.Priority priority = transformResourcePriority(req.getPriority());
@@ -131,7 +137,14 @@ public class AllocationRequestUtils {
   private static String getQueue(ApplicationAttemptId appAttemptId, RMContext
       rmContext) {
     RMApp app = rmContext.getRMApps().get(appAttemptId.getApplicationId());
-    return app.getQueue();
+    return getQueue(app);
+  }
+
+  public static String getQueue(RMApp app) {
+    return StringUtils.isEmpty(app.getQueue()) ?
+        DEFAULT_QUEUE :
+        app.getQueue();
+
   }
 
   private static Si.Priority transformResourcePriority(Priority priority) {
@@ -151,5 +164,17 @@ public class AllocationRequestUtils {
           quantityBuilder.build());
     }
     return resourceBuilder.build();
+  }
+
+  public static String getPartition(ResourceRequest request) {
+    String partition = request.getNodeLabelExpression() == null ? NO_LABEL :
+        request.getNodeLabelExpression();
+    return partition;
+  }
+
+  public static String getPartition(RMApp rmApp) {
+    String partition = rmApp.getAppNodeLabelExpression() == null ? NO_LABEL :
+        rmApp.getAppNodeLabelExpression();
+    return partition;
   }
 }
